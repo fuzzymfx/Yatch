@@ -1,2 +1,3 @@
 # Yatch
-Interpreter for RISC-V
+
+A machine code interpreter for RISC-V in C++.
