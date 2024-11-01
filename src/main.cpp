@@ -193,6 +193,68 @@ public:
 		}
 	}
 
+	bitset<8> readByte(uint32_t address)
+	{
+		if (address < DMem.size())
+		{
+			return DMem[address];
+		}
+		else
+		{
+			// Handle out-of-bounds access
+			cout << "Read Byte Error: Address out of bounds" << endl;
+			return bitset<8>(0);
+		}
+	}
+
+	// Method to read a half-word (2 bytes) from data memory at a given address
+	bitset<16> readHalfWord(uint32_t address)
+	{
+		if (address + 1 < DMem.size())
+		{
+			// Big-Endian: lower address holds the most significant byte
+			uint16_t msb = DMem[address].to_ulong();		 // Most significant byte
+			uint16_t lsb = DMem[address + 1].to_ulong(); // Least significant byte
+			uint16_t data = (msb << 8) | lsb;
+			return bitset<16>(data);
+		}
+		else
+		{
+			// Handle out-of-bounds access
+			cout << "Read Half-Word Error: Address out of bounds" << endl;
+			return bitset<16>(0);
+		}
+	}
+	// Method to write a byte to data memory at a given address
+	void writeByte(uint32_t address, bitset<8> data)
+	{
+		if (address < DMem.size())
+		{
+			DMem[address] = data;
+		}
+		else
+		{
+			// Handle out-of-bounds access
+			cout << "Write Byte Error: Address out of bounds" << endl;
+		}
+	}
+
+	void writeHalfWord(uint32_t address, bitset<16> data)
+	{
+		if (address + 1 < DMem.size())
+		{
+			uint16_t value = data.to_ulong();
+			// Big-Endian: lower address holds the most significant byte
+			DMem[address] = bitset<8>((value >> 8) & 0xFF); // MSB
+			DMem[address + 1] = bitset<8>(value & 0xFF);		// LSB
+		}
+		else
+		{
+			// Handle out-of-bounds access
+			cout << "Write Half-Word Error: Address out of bounds" << endl;
+		}
+	}
+
 	bitset<32> readDataMem(bitset<32> Address)
 	{
 		// Convert Address to an integer for indexing
@@ -280,6 +342,8 @@ public:
 
 	void writeRF(bitset<5> Reg_addr, bitset<32> Wrt_reg_data)
 	{
+		// Debug statement
+		cout << "[DEBUG] Writing to register " << Reg_addr.to_ulong() << ": " << Wrt_reg_data << endl;
 		// Converts Reg_addr to integer for indexing
 		uint32_t reg_index = Reg_addr.to_ulong();
 
@@ -345,106 +409,354 @@ public:
 
 class SingleStageCore : public Core
 {
+
+private:
+	string opFilePath;
+
 public:
-	SingleStageCore(string ioDir, InsMem &imem, DataMem &dmem) : Core(ioDir + "/SS_", imem, dmem), opFilePath(ioDir + "/StateResult_SS.txt") {}
+	SingleStageCore(string ioDir, InsMem &imem, DataMem &dmem) : Core(ioDir + "/SS_", imem, dmem), opFilePath(ioDir + "/StateResult_SS.txt")
+	{
+		// Initialize PC to 0
+		state.SS.PC = bitset<32>(0);
+	}
 
 	void step()
 	{
 		try
 		{
-			// if (cycle > 10)
-			// { // Arbitrary cycle limit for debugging
-			// 	halted = true;
-			// 	// Limiting the number of cycles to prevent infinite loops for simulation, real hardware would not have this limit constraint
-			// 	// Comment out this code block to run the simulation indefinitely
-			// 	throw runtime_error("Cycle limit reached, halting execution.");
-			// }
-
 			// 1. Fetch the instruction at the current PC
 			bitset<32> instruction = ext_imem.readInstr(state.SS.PC);
+			uint32_t instr = instruction.to_ulong();
 
 			// Debug statement
 			cout << "[DEBUG] Cycle: " << cycle + 1 << ", PC: " << state.SS.PC.to_ulong() << ", Instruction: " << instruction << endl;
 
-			// Check if it's a HALT instruction (all 1s in RISC-V convention for HALT)
-			if (instruction.to_ulong() == 0xFFFFFFFF)
+			// Check if it's a HALT instruction (all 1s in our convention for HALT)
+			if (instr == 0xFFFFFFFF)
 			{
 				halted = true;
 				state.SS.nop = true;
+				// Output register file and state for this cycle
+				myRF.outputRF(cycle);
 				printState(state, cycle);
 				return;
 			}
 
-			// 2. Decode the instruction fields
-			int opcode = stoi(instruction.to_string().substr(25, 7), nullptr, 2); // opcode is last 7 bits
-			int rd = stoi(instruction.to_string().substr(20, 5), nullptr, 2);			// destination register
-			int funct3 = stoi(instruction.to_string().substr(17, 3), nullptr, 2); // funct3 field
-			int rs1 = stoi(instruction.to_string().substr(12, 5), nullptr, 2);		// source register 1
-			int rs2 = stoi(instruction.to_string().substr(7, 5), nullptr, 2);			// source register 2
-			int funct7 = stoi(instruction.to_string().substr(0, 7), nullptr, 2);	// funct7 for R-type
+			// 2. Decode the instruction
+			uint32_t opcode = instr & 0x7F;
+			uint32_t rd = (instr >> 7) & 0x1F;
+			uint32_t funct3 = (instr >> 12) & 0x7;
+			uint32_t rs1 = (instr >> 15) & 0x1F;
+			uint32_t rs2 = (instr >> 20) & 0x1F;
+			uint32_t funct7 = (instr >> 25) & 0x7F;
 
-			// Prepare variables for result
 			bitset<32> result;
-			bitset<32> address;
+			uint32_t address;
+			bool pc_updated = false;
 
 			// 3. Execute based on opcode
 			switch (opcode)
 			{
-			case 0x33: // R-type instructions (e.g., ADD, SUB)
+			case 0x33: // R-type instructions
+			{
 				switch (funct3)
 				{
-				case 0x0: // ADD or SUB based on funct7
+				case 0x0:
 					if (funct7 == 0x00)
-					{ // ADD
+					{
+						// ADD
 						result = bitset<32>(myRF.readRF(rs1).to_ulong() + myRF.readRF(rs2).to_ulong());
 					}
 					else if (funct7 == 0x20)
-					{ // SUB
+					{
+						// SUB
 						result = bitset<32>(myRF.readRF(rs1).to_ulong() - myRF.readRF(rs2).to_ulong());
 					}
+					else
+					{
+						throw runtime_error("Unknown funct7 in ADD/SUB: " + to_string(funct7));
+					}
 					break;
-					// Add more cases here if other R-type instructions are required
+				case 0x1:
+					// SLL
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() << (myRF.readRF(rs2).to_ulong() & 0x1F));
+					break;
+				case 0x2:
+					// SLT
+					result = bitset<32>((int32_t)myRF.readRF(rs1).to_ulong() < (int32_t)myRF.readRF(rs2).to_ulong());
+					break;
+				case 0x3:
+					// SLTU
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() < myRF.readRF(rs2).to_ulong());
+					break;
+				case 0x4:
+					// XOR
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() ^ myRF.readRF(rs2).to_ulong());
+					break;
+				case 0x5:
+					if (funct7 == 0x00)
+					{
+						// SRL
+						result = bitset<32>(myRF.readRF(rs1).to_ulong() >> (myRF.readRF(rs2).to_ulong() & 0x1F));
+					}
+					else if (funct7 == 0x20)
+					{
+						// SRA
+						result = bitset<32>((int32_t)myRF.readRF(rs1).to_ulong() >> (myRF.readRF(rs2).to_ulong() & 0x1F));
+					}
+					else
+					{
+						cout << "Unknown funct7 in SRL/SRA: " << funct7 << endl;
+					}
+					break;
+				case 0x6:
+					// OR
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() | myRF.readRF(rs2).to_ulong());
+					break;
+				case 0x7:
+					// AND
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() & myRF.readRF(rs2).to_ulong());
+					break;
+				default:
+					cout << "Unknown funct3 in R-type instruction: " << funct3 << endl;
+					break;
 				}
-				myRF.writeRF(rd, result);
-				break;
-
-			case 0x03: // I-type instructions (e.g., LW)
-				switch (funct3)
-				{
-				case 0x2: // LW (Load Word)
-					address = bitset<32>(myRF.readRF(rs1).to_ulong() + stoi(instruction.to_string().substr(0, 12), nullptr, 2));
-					result = ext_dmem.readDataMem(address);
+				// Write result to rd if rd is not x0
+				if (rd != 0)
 					myRF.writeRF(rd, result);
-					break;
-				}
 				break;
+			}
+			case 0x03: // Load instructions
+			{
+				int32_t imm = get_imm_i(instr);
+				address = myRF.readRF(rs1).to_ulong() + imm;
 
-			case 0x23: // S-type instructions (e.g., SW)
 				switch (funct3)
 				{
-				case 0x2: // SW (Store Word)
-					address = bitset<32>(myRF.readRF(rs1).to_ulong() + stoi(instruction.to_string().substr(0, 12), nullptr, 2));
-					ext_dmem.writeDataMem(address, myRF.readRF(rs2));
+				case 0x0: // LB
+				{
+					bitset<8> data = ext_dmem.readByte(address);
+					int8_t signed_data = (int8_t)data.to_ulong();
+					result = bitset<32>(signed_data);
+					break;
+				}
+				case 0x1: // LH
+				{
+					bitset<16> data = ext_dmem.readHalfWord(address);
+					int16_t signed_data = (int16_t)data.to_ulong();
+					result = bitset<32>(signed_data);
+					break;
+				}
+				case 0x2: // LW
+				{
+					result = ext_dmem.readDataMem(address);
+					break;
+				}
+				case 0x4: // LBU
+				{
+					bitset<8> data = ext_dmem.readByte(address);
+					result = bitset<32>(data.to_ulong());
+					break;
+				}
+				case 0x5: // LHU
+				{
+					bitset<16> data = ext_dmem.readHalfWord(address);
+					result = bitset<32>(data.to_ulong());
+					break;
+				}
+				default:
+					cout << "Unknown funct3 in Load instruction: " << funct3 << endl;
+					break;
+				}
+				if (rd != 0)
+					myRF.writeRF(rd, result);
+				break;
+			}
+			case 0x23: // Store instructions
+			{
+				int32_t imm = get_imm_s(instr);
+				address = myRF.readRF(rs1).to_ulong() + imm;
+
+				switch (funct3)
+				{
+				case 0x0: // SB
+				{
+					bitset<8> data = bitset<8>(myRF.readRF(rs2).to_ulong() & 0xFF);
+					ext_dmem.writeByte(address, data);
+					break;
+				}
+				case 0x1: // SH
+				{
+					bitset<16> data = bitset<16>(myRF.readRF(rs2).to_ulong() & 0xFFFF);
+					ext_dmem.writeHalfWord(address, data);
+					break;
+				}
+				case 0x2: // SW
+				{
+					bitset<32> data = myRF.readRF(rs2);
+					ext_dmem.writeDataMem(address, data);
+					break;
+				}
+				default:
+					cout << "Unknown funct3 in Store instruction: " << funct3 << endl;
 					break;
 				}
 				break;
+			}
+			case 0x13: // I-type arithmetic instructions
+			{
+				bool isLogical = (funct3 == 0x4) || (funct3 == 0x6) || (funct3 == 0x7); // XORI, ORI, ANDI
+				int32_t imm = get_imm_i(instr, isLogical);
 
+				switch (funct3)
+				{
+				case 0x0: // ADDI
+					result = bitset<32>((int32_t)myRF.readRF(rs1).to_ulong() + imm);
+					break;
+				case 0x2: // SLTI
+					result = bitset<32>((int32_t)myRF.readRF(rs1).to_ulong() < imm ? 1 : 0);
+					break;
+				case 0x3: // SLTIU
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() < (uint32_t)imm ? 1 : 0);
+					break;
+				case 0x4: // XORI
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() ^ (uint32_t)imm);
+					break;
+				case 0x6: // ORI
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() | (uint32_t)imm);
+					break;
+				case 0x7: // ANDI
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() & (uint32_t)imm);
+					break;
+				case 0x1: // SLLI
+					result = bitset<32>(myRF.readRF(rs1).to_ulong() << (imm & 0x1F));
+					break;
+				case 0x5:
+					if ((imm >> 10) == 0x00)
+					{
+						// SRLI
+						result = bitset<32>(myRF.readRF(rs1).to_ulong() >> (imm & 0x1F));
+					}
+					else if ((imm >> 10) == 0x20)
+					{
+						// SRAI
+						result = bitset<32>((int32_t)myRF.readRF(rs1).to_ulong() >> (imm & 0x1F));
+					}
+					else
+					{
+						cout << "Unknown funct7 in SRLI/SRAI instruction: " << (imm >> 10) << endl;
+					}
+					break;
+				default:
+					cout << "Unknown funct3 in I-type arithmetic instruction: " << funct3 << endl;
+					break;
+				}
+				if (rd != 0)
+					myRF.writeRF(rd, result);
+				break;
+			}
+			case 0x63: // Branch instructions
+			{
+				int32_t imm = get_imm_b(instr);
+
+				switch (funct3)
+				{
+				case 0x0: // BEQ
+					if (myRF.readRF(rs1).to_ulong() == myRF.readRF(rs2).to_ulong())
+					{
+						state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+						pc_updated = true;
+					}
+					break;
+				case 0x1: // BNE
+					if (myRF.readRF(rs1).to_ulong() != myRF.readRF(rs2).to_ulong())
+					{
+						state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+						pc_updated = true;
+					}
+					break;
+				case 0x4: // BLT
+					if ((int32_t)myRF.readRF(rs1).to_ulong() < (int32_t)myRF.readRF(rs2).to_ulong())
+					{
+						state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+						pc_updated = true;
+					}
+					break;
+				case 0x5: // BGE
+					if ((int32_t)myRF.readRF(rs1).to_ulong() >= (int32_t)myRF.readRF(rs2).to_ulong())
+					{
+						state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+						pc_updated = true;
+					}
+					break;
+				case 0x6: // BLTU
+					if (myRF.readRF(rs1).to_ulong() < myRF.readRF(rs2).to_ulong())
+					{
+						state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+						pc_updated = true;
+					}
+					break;
+				case 0x7: // BGEU
+					if (myRF.readRF(rs1).to_ulong() >= myRF.readRF(rs2).to_ulong())
+					{
+						state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+						pc_updated = true;
+					}
+					break;
+				default:
+					cout << "Unknown funct3 in Branch instruction: " << funct3 << endl;
+					break;
+				}
+				break;
+			}
+			case 0x6F: // JAL
+			{
+				int32_t imm = get_imm_j(instr);
+				if (rd != 0)
+					myRF.writeRF(rd, bitset<32>(state.SS.PC.to_ulong() + 4));
+				state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + imm);
+				pc_updated = true;
+				break;
+			}
+			case 0x67: // JALR
+			{
+				int32_t imm = get_imm_i(instr);
+				uint32_t target = (myRF.readRF(rs1).to_ulong() + imm) & ~1;
+				if (rd != 0)
+					myRF.writeRF(rd, bitset<32>(state.SS.PC.to_ulong() + 4));
+				state.SS.PC = bitset<32>(target);
+				pc_updated = true;
+				break;
+			}
+			case 0x37: // LUI
+			{
+				int32_t imm = get_imm_u(instr);
+				if (rd != 0)
+					myRF.writeRF(rd, bitset<32>(imm));
+				break;
+			}
+			case 0x17: // AUIPC
+			{
+				int32_t imm = get_imm_u(instr);
+				if (rd != 0)
+					myRF.writeRF(rd, bitset<32>(state.SS.PC.to_ulong() + imm));
+				break;
+			}
 			default:
-				cout << "Unknown opcode encountered: " << opcode << endl;
+				cout << "Unknown opcode encountered: " << std::hex << opcode << endl;
 				break;
 			}
 
-			// 4. Update PC for the next instruction
-			state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + 4);
-			// Debug statement
-			// cout << "PC: " << state.SS.PC.to_ulong() << endl;
+			// 4. Update PC for the next instruction if not updated
+			if (!pc_updated)
+			{
+				state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + 4);
+			}
 
 			// Output register file and state for this cycle
 			myRF.outputRF(cycle);			// dump RF
 			printState(state, cycle); // print states after executing this cycle
 
-			// Single stage core only executes one instruction per cycle, there is no pipeline, thus the state is not updated
-			// state = nextState; // This statement is commented on purpose
 			cycle++;
 		}
 		catch (const exception &e)
@@ -487,7 +799,54 @@ public:
 	}
 
 private:
-	string opFilePath;
+	// Helper function to sign-extend I-type immediate
+	int32_t get_imm_i(uint32_t instr, bool isLogical = false)
+	{
+		int32_t imm = (instr >> 20) & 0xFFF; // Extract bits [31:20]
+		if (!isLogical && (imm & 0x800))		 // Check if sign bit (bit 11) is set and not logical
+			imm |= 0xFFFFF000;								 // Sign-extend to 32 bits
+		return imm;
+	}
+
+	// Helper function to sign-extend S-type immediate
+	int32_t get_imm_s(uint32_t instr)
+	{
+		int32_t imm = ((instr >> 25) << 5) | ((instr >> 7) & 0x1F);
+		if (imm & 0x800)
+			imm |= 0xFFFFF000;
+		return imm;
+	}
+
+	// Helper function to sign-extend B-type immediate
+	int32_t get_imm_b(uint32_t instr)
+	{
+		int32_t imm = ((instr >> 31) << 12) |
+									(((instr >> 7) & 0x1) << 11) |
+									(((instr >> 25) & 0x3F) << 5) |
+									(((instr >> 8) & 0xF) << 1);
+		if (imm & 0x1000)
+			imm |= 0xFFFFE000;
+		return imm;
+	}
+
+	// Helper function to get U-type immediate
+	int32_t get_imm_u(uint32_t instr)
+	{
+		int32_t imm = instr & 0xFFFFF000;
+		return imm;
+	}
+
+	// Helper function to sign-extend J-type immediate
+	int32_t get_imm_j(uint32_t instr)
+	{
+		int32_t imm = ((instr >> 31) << 20) |
+									(((instr >> 12) & 0xFF) << 12) |
+									(((instr >> 20) & 0x1) << 11) |
+									(((instr >> 21) & 0x3FF) << 1);
+		if (imm & 0x100000)
+			imm |= 0xFFE00000;
+		return imm;
+	}
 };
 
 // class FiveStageCore : public Core
