@@ -973,13 +973,19 @@ int main(int argc, char *argv[])
 		{
 			if (!SSCore.halted)
 				SSCore.step();
+			else
+			{
+				// Ensure the nop flag is set correctly after halting
+				SSCore.state.SS.nop = true;
+				SSCore.printState(SSCore.state, SSCore.cycle);
+				break;
+			}
 
 			// if (!FSCore.halted)
 			// 	FSCore.step();
 
-			if (SSCore.halted)
-				// && FSCore.halted)
-				break;
+			// if (SSCore.halted && FSCore.halted)
+			// 	break;
 		}
 
 		// dump SS and FS data mem.
