@@ -521,8 +521,7 @@ public:
 					cout << "Unknown funct3 in R-type instruction: " << funct3 << endl;
 					break;
 				}
-				// Write result to rd if rd is not x0
-				if (rd != 0)
+				if (rd != 0) // x0 is hardwired to 0, cannot be overwritten
 					myRF.writeRF(rd, result);
 				break;
 			}
