@@ -97,3 +97,11 @@ A machine code interpreter for RISC-V, in C++. This attempts at simulating the e
 00110011
 00110011
 00110011
+
+## Liscense
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## References
+
+- [RISC-V ISA Specification](https://github.com/riscv/riscv-isa-manual/releases/): The official RISC-V ISA manual.

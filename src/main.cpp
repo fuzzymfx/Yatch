@@ -136,7 +136,7 @@ public:
 		}
 		catch (const exception &e)
 		{
-			cout << e.what() << endl;
+			throw runtime_error("An error occurred: " + string(e.what()));
 		}
 	}
 
@@ -189,7 +189,7 @@ public:
 		}
 		catch (const exception &e)
 		{
-			cout << e.what() << endl;
+			throw runtime_error("An error occurred: " + string(e.what()));
 		}
 	}
 
@@ -202,7 +202,7 @@ public:
 		else
 		{
 			// Handle out-of-bounds access
-			cout << "Read Byte Error: Address out of bounds" << endl;
+			throw runtime_error("Read Byte Error: Address out of bounds.");
 			return bitset<8>(0);
 		}
 	}
@@ -221,7 +221,7 @@ public:
 		else
 		{
 			// Handle out-of-bounds access
-			cout << "Read Half-Word Error: Address out of bounds" << endl;
+			throw("Read Half-Word Error: Address out of bounds");
 			return bitset<16>(0);
 		}
 	}
@@ -235,7 +235,7 @@ public:
 		else
 		{
 			// Handle out-of-bounds access
-			cout << "Write Byte Error: Address out of bounds" << endl;
+			throw runtime_error("Write Byte Error: Address out of bounds");
 		}
 	}
 
@@ -251,7 +251,7 @@ public:
 		else
 		{
 			// Handle out-of-bounds access
-			cout << "Write Half-Word Error: Address out of bounds" << endl;
+			throw runtime_error("Write Half-Word Error: Address out of bounds");
 		}
 	}
 
@@ -307,7 +307,7 @@ public:
 			}
 		}
 		else
-			cout << "Unable to open " << MemType::toString(id) << " DMEM result file." << endl;
+			throw runtime_error("Unable to open " + MemType::toString(id) + " DMEM result file.");
 		dmemout.close();
 	}
 
@@ -379,12 +379,12 @@ public:
 				}
 			}
 			else
-				cout << "Unable to open RF output file." << endl;
+				throw runtime_error("Unable to open RF output file.");
 			rfout.close();
 		}
 		catch (const exception &e)
 		{
-			cout << "An error occurred in RegisterFile::outputRF: " << e.what() << endl;
+			throw runtime_error("An error occurred in RegisterFile::outputRF: " + string(e.what()));
 		}
 	}
 };
@@ -424,25 +424,25 @@ public:
 	{
 		try
 		{
-			// 1. Fetch the instruction at the current PC
+			// Fetches the instruction from the instruction memory
 			bitset<32> instruction = ext_imem.readInstr(state.SS.PC);
 			uint32_t instr = instruction.to_ulong();
 
 			// Debug statement
 			cout << "[DEBUG] Cycle: " << cycle + 1 << ", PC: " << state.SS.PC.to_ulong() << ", Instruction: " << instruction << endl;
 
-			// Check if it's a HALT instruction (all 1s in our convention for HALT)
+			// Checks if it's a HALT instruction
 			if (instr == 0xFFFFFFFF)
 			{
 				halted = true;
 				state.SS.nop = true;
-				// Output register file and state for this cycle
+				// Outputs register file and state for this cycle
 				myRF.outputRF(cycle);
 				printState(state, cycle);
 				return;
 			}
 
-			// 2. Decode the instruction
+			// Decodes the instruction
 			uint32_t opcode = instr & 0x7F;
 			uint32_t rd = (instr >> 7) & 0x1F;
 			uint32_t funct3 = (instr >> 12) & 0x7;
@@ -454,7 +454,7 @@ public:
 			uint32_t address;
 			bool pc_updated = false;
 
-			// 3. Execute based on opcode
+			// Execute the instruction based on the opcode
 			switch (opcode)
 			{
 			case 0x33: // R-type instructions
@@ -506,7 +506,7 @@ public:
 					}
 					else
 					{
-						cout << "Unknown funct7 in SRL/SRA: " << funct7 << endl;
+						throw runtime_error("Unknown funct7 in SRL/SRA: " + to_string(funct7));
 					}
 					break;
 				case 0x6:
@@ -518,7 +518,7 @@ public:
 					result = bitset<32>(myRF.readRF(rs1).to_ulong() & myRF.readRF(rs2).to_ulong());
 					break;
 				default:
-					cout << "Unknown funct3 in R-type instruction: " << funct3 << endl;
+					throw runtime_error("Unknown funct3 in R-type instruction: " + to_string(funct3));
 					break;
 				}
 				if (rd != 0) // x0 is hardwired to 0, cannot be overwritten
@@ -563,8 +563,8 @@ public:
 					result = bitset<32>(data.to_ulong());
 					break;
 				}
-				default:
-					cout << "Unknown funct3 in Load instruction: " << funct3 << endl;
+				default: // Should never reach here
+					throw runtime_error("Unknown funct3 in Load instruction: " + to_string(funct3));
 					break;
 				}
 				if (rd != 0)
@@ -596,8 +596,8 @@ public:
 					ext_dmem.writeDataMem(address, data);
 					break;
 				}
-				default:
-					cout << "Unknown funct3 in Store instruction: " << funct3 << endl;
+				default: // Should not reach here
+					throw runtime_error("Unknown funct3 in Store instruction: " + to_string(funct3));
 					break;
 				}
 				break;
@@ -641,13 +641,13 @@ public:
 						// SRAI
 						result = bitset<32>((int32_t)myRF.readRF(rs1).to_ulong() >> (imm & 0x1F));
 					}
-					else
+					else // Should not reach here
 					{
-						cout << "Unknown funct7 in SRLI/SRAI instruction: " << (imm >> 10) << endl;
+						throw runtime_error("Unknown funct7 in SRLI/SRAI instruction: " + to_string(imm >> 10));
 					}
 					break;
-				default:
-					cout << "Unknown funct3 in I-type arithmetic instruction: " << funct3 << endl;
+				default: // Should not reach here
+					throw runtime_error("Unknown funct3 in I-type arithmetic instruction: " + to_string(funct3));
 					break;
 				}
 				if (rd != 0)
@@ -702,8 +702,8 @@ public:
 						pc_updated = true;
 					}
 					break;
-				default:
-					cout << "Unknown funct3 in Branch instruction: " << funct3 << endl;
+				default: // Should not reach here
+					throw runtime_error("Unknown funct3 in Branch instruction: " + to_string(funct3));
 					break;
 				}
 				break;
@@ -741,15 +741,53 @@ public:
 					myRF.writeRF(rd, bitset<32>(state.SS.PC.to_ulong() + imm));
 				break;
 			}
-			default:
-				cout << "Unknown opcode encountered: " << std::hex << opcode << endl;
+			case 0x73: // System instructions
+			{
+				switch (funct3)
+				{
+				case 0x0:
+					if (funct7 == 0x0)
+					{
+						// ECALL
+						cout << "ECALL executed." << endl;
+					}
+					else if (funct7 == 0x1)
+					{
+						// EBREAK
+						cout << "EBREAK executed." << endl;
+						halted = true;
+					}
+					else
+					{
+						throw runtime_error("Unknown funct7 in ECALL/EBREAK: " + to_string(funct7));
+					}
+					break;
+				case 0x1:
+				{
+					// CSRRW
+					uint32_t csr = (instr >> 20) & 0xFFF;
+					if (rd != 0)
+					{
+						bitset<32> csr_val = bitset<32>(0); // Placeholder for CSR value
+						myRF.writeRF(rd, csr_val);
+					}
+				}
+				break;
+				default:
+					break;
+				}
+				break;
+			}
+			default: // Should not reach here
+				throw runtime_error("Unknown opcode encountered: " + to_string(opcode));
 				break;
 			}
 
-			// 4. Update PC for the next instruction if not updated
+			// Update the PC if it wasn't updated by a branch or jump instruction
 			if (!pc_updated)
 			{
 				state.SS.PC = bitset<32>(state.SS.PC.to_ulong() + 4);
+				// Increment PC by 4 bytes. This would point to a new instruction. An instruction is 4 bytes wide
 			}
 
 			// Output register file and state for this cycle
@@ -760,23 +798,23 @@ public:
 		}
 		catch (const exception &e)
 		{
-			cout << "An error occurred in SingleStageCore::step: " << e.what() << endl;
+			throw runtime_error("An error occurred in SingleStageCore::step: " + string(e.what()));
 		}
 	}
 
-	void printState(stateStruct state, int cycle)
+	void printState(stateStruct state, int cycle) // A Debug function to print the state of the core- used for verifying the cycle-by-cycle operation
 	{
 		try
 		{
 			ofstream printstate;
-			// If it's the first cycle, truncate the file, otherwise append
+			// The first cycle indicates a new run and truncates the file
 			if (cycle == 0)
 			{
 				printstate.open(opFilePath, std::ios_base::trunc);
 				printstate << "----------------------------------------------------------------------" << endl;
 			}
 
-			else
+			else // Append to the file for subsequent cycles
 				printstate.open(opFilePath, std::ios_base::app);
 			if (printstate.is_open())
 			{
@@ -787,13 +825,13 @@ public:
 			}
 			else
 			{
-				cout << "Unable to open SS StateResult output file." << endl;
+				throw runtime_error("Unable to open SS StateResult output file.");
 			}
 			printstate.close();
 		}
 		catch (const exception &e)
 		{
-			cout << "An error occurred in SingleStageCore::printState: " << e.what() << endl;
+			throw runtime_error("An error occurred in SingleStageCore::printState: " + string(e.what()));
 		}
 	}
 
@@ -810,38 +848,39 @@ private:
 	// Helper function to sign-extend S-type immediate
 	int32_t get_imm_s(uint32_t instr)
 	{
-		int32_t imm = ((instr >> 25) << 5) | ((instr >> 7) & 0x1F);
-		if (imm & 0x800)
-			imm |= 0xFFFFF000;
+		int32_t imm = ((instr >> 25) << 5) | ((instr >> 7) & 0x1F); // Extract bits [31:25] and [11:7]
+		if (imm & 0x800)																						// Check if sign bit (bit 11) is set
+			imm |= 0xFFFFF000;																				// Sign-extend to 32 bits
 		return imm;
 	}
 
 	// Helper function to sign-extend B-type immediate
 	int32_t get_imm_b(uint32_t instr)
 	{
-		int32_t imm = ((instr >> 31) << 12) |
-									(((instr >> 7) & 0x1) << 11) |
-									(((instr >> 25) & 0x3F) << 5) |
-									(((instr >> 8) & 0xF) << 1);
+		int32_t imm = ((instr >> 31) << 12) |					// Extract bit 31 and shift to bit 12
+									(((instr >> 7) & 0x1) << 11) |	// Extract bit 7 and shift to bit 11
+									(((instr >> 25) & 0x3F) << 5) | // Extract bits [31:25] and shift to bits [10:5]
+									(((instr >> 8) & 0xF) << 1);		// Extract bits [11:8] and shift to bits [4:1]
 		if (imm & 0x1000)
-			imm |= 0xFFFFE000;
+			imm |= 0xFFFFE000; // Sign-extend to 32 bits
 		return imm;
 	}
 
 	// Helper function to get U-type immediate
 	int32_t get_imm_u(uint32_t instr)
 	{
-		int32_t imm = instr & 0xFFFFF000;
+		int32_t imm = instr & 0xFFFFF000; // Extract bits [31:12]
 		return imm;
 	}
 
 	// Helper function to sign-extend J-type immediate
 	int32_t get_imm_j(uint32_t instr)
 	{
-		int32_t imm = ((instr >> 31) << 20) |
-									(((instr >> 12) & 0xFF) << 12) |
-									(((instr >> 20) & 0x1) << 11) |
-									(((instr >> 21) & 0x3FF) << 1);
+		int32_t imm = ((instr >> 31) << 20) |					 // Extract bit 31 and shift to bit 20
+									(((instr >> 12) & 0xFF) << 12) | // Extract bits [19:12] and shift to bits [19:12]
+									(((instr >> 20) & 0x1) << 11) |	 // Extract bit 20 and shift to bit 11
+									(((instr >> 21) & 0x3FF) << 1);	 // Extract bits [10:1] and shift to bits [10:1]
+
 		if (imm & 0x100000)
 			imm |= 0xFFE00000;
 		return imm;
@@ -926,6 +965,7 @@ private:
 // 		}
 // 		else
 // 			cout << "Unable to open FS StateResult output file." << endl;
+// throw runtime_error("Unable to open FS StateResult output file.");
 // 		printstate.close();
 // 	}
 
@@ -952,7 +992,7 @@ int main(int argc, char *argv[])
 		}
 		else if (argc > 2)
 		{
-			cout << "Invalid number of arguments. Machine stopped." << endl;
+			throw runtime_error("Invalid number of arguments. Machine stopped.");
 			return -1;
 		}
 		else
@@ -976,7 +1016,7 @@ int main(int argc, char *argv[])
 			{
 				// Ensure the nop flag is set correctly after halting
 				SSCore.state.SS.nop = true;
-				SSCore.printState(SSCore.state, SSCore.cycle);
+				SSCore.printState(SSCore.state, SSCore.cycle); // The final state after halting
 				break;
 			}
 
@@ -993,7 +1033,7 @@ int main(int argc, char *argv[])
 	}
 	catch (const exception &e)
 	{
-		cout << "An error occurred: " << e.what() << endl;
+		throw runtime_error("An error occurred: " + string(e.what()));
 		return -1;
 	}
 
