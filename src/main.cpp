@@ -234,7 +234,6 @@ public:
 		}
 		else
 		{
-			// Handle out-of-bounds access
 			throw runtime_error("Write Byte Error: Address out of bounds");
 		}
 	}
@@ -250,31 +249,27 @@ public:
 		}
 		else
 		{
-			// Handle out-of-bounds access
 			throw runtime_error("Write Half-Word Error: Address out of bounds");
 		}
 	}
 
 	bitset<32> readDataMem(bitset<32> Address)
 	{
-		// Convert Address to an integer for indexing
 		uint32_t address = (uint32_t)Address.to_ulong();
 
-		// Bounds check to ensure we're within memory limits
-		if (address + 3 >= MemSize)
+		if (address + 3 < DMem.size())
+		{
+			uint32_t data = (DMem[address].to_ulong() << 24) |
+											(DMem[address + 1].to_ulong() << 16) |
+											(DMem[address + 2].to_ulong() << 8) |
+											DMem[address + 3].to_ulong();
+
+			return bitset<32>(data);
+		}
+		else
 		{
 			throw runtime_error("Read address is out of bounds.");
 		}
-
-		// Combine 4 bytes to form a 32-bit word (Big-Endian order)
-		bitset<32> data;
-		for (int i = 0; i < 4; ++i)
-		{
-			data <<= 8;																				// Shift left by 8 bits to make room for the next byte
-			data |= bitset<32>(DMem[address + i].to_ulong()); // Combine the byte
-		}
-
-		return data;
 	}
 
 	void writeDataMem(bitset<32> Address, bitset<32> WriteData)
@@ -397,8 +392,8 @@ public:
 	bool halted = false;
 	string ioDir;
 	struct stateStruct state, nextState;
-	InsMem ext_imem;
-	DataMem ext_dmem;
+	InsMem &ext_imem;
+	DataMem &ext_dmem;
 
 	Core(string ioDir, InsMem &imem, DataMem &dmem) : myRF(ioDir), ioDir{ioDir}, ext_imem{imem}, ext_dmem{dmem} {}
 
@@ -433,6 +428,9 @@ public:
 
 			// Checks if it's a HALT instruction
 			if (instr == 0xFFFFFFFF)
+			// *This is not a valid RISC-V instruction*. It's a placeholder for HALT
+			// Halt instructions are not present in RISC-V ISA. This is a placeholder for the simulator
+			// RISC V uses ECALL and EBREAK to halt the program and trigger an exception to be handled by the OS
 			{
 				halted = true;
 				state.SS.nop = true;
@@ -965,7 +963,7 @@ private:
 // 		}
 // 		else
 // 			cout << "Unable to open FS StateResult output file." << endl;
-// throw runtime_error("Unable to open FS StateResult output file.");
+//		  throw runtime_error("Unable to open FS StateResult output file.");
 // 		printstate.close();
 // 	}
 
