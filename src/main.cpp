@@ -64,6 +64,12 @@ struct EXStruct
 	MemOp mem_op;
 	bool wrt_enable;
 	bool nop;
+
+	uint32_t opcode;
+	bitset<32> PC;
+	bool is_jal;
+	bool is_jalr;
+	bool is_auipc;
 };
 
 struct MEMStruct
@@ -288,6 +294,11 @@ public:
 	{
 		uint32_t address = (uint32_t)Address.to_ulong();
 
+		if (address % 4 != 0)
+		{
+			throw runtime_error("Misaligned memory access at address: " + to_string(address));
+		}
+
 		if (address + 3 < DMem.size())
 		{
 			uint32_t data = (DMem[address].to_ulong() << 24) |
@@ -307,6 +318,11 @@ public:
 	{
 		// Convert Address to an integer for indexing
 		uint32_t address = Address.to_ulong();
+
+		if (address % 4 != 0)
+		{
+			throw runtime_error("Misaligned memory access at address: " + to_string(address));
+		}
 
 		// Bounds check to ensure we're within memory limits
 		if (address + 3 >= MemSize)
@@ -964,87 +980,86 @@ public:
 			nextState.WB.wrt_enable = state.MEM.wrt_enable;
 
 			if (state.MEM.rd_mem)
-				if (state.MEM.rd_mem)
+			{
+				// Load from memory based on MemOp
+				uint32_t address = state.MEM.ALUresult.to_ulong();
+				bitset<32> memData;
+
+				switch (state.MEM.mem_op)
 				{
-					// Load from memory based on MemOp
-					uint32_t address = state.MEM.ALUresult.to_ulong();
-					bitset<32> memData;
-
-					switch (state.MEM.mem_op)
-					{
-					case MemLB: // Load Byte
-					{
-						bitset<8> data = ext_dmem.readByte(address);
-						int8_t signed_data = (int8_t)data.to_ulong();
-						memData = bitset<32>(signed_data);
-						break;
-					}
-					case MemLH: // Load Half Word
-					{
-						bitset<16> data = ext_dmem.readHalfWord(address);
-						int16_t signed_data = (int16_t)data.to_ulong();
-						memData = bitset<32>(signed_data);
-						break;
-					}
-					case MemLW: // Load Word
-					{
-						memData = ext_dmem.readDataMem(address);
-						break;
-					}
-					case MemLBU: // Load Byte Unsigned
-					{
-						bitset<8> data = ext_dmem.readByte(address);
-						memData = bitset<32>(data.to_ulong());
-						break;
-					}
-					case MemLHU: // Load Half Word Unsigned
-					{
-						bitset<16> data = ext_dmem.readHalfWord(address);
-						memData = bitset<32>(data.to_ulong());
-						break;
-					}
-					default:
-						throw runtime_error("Unknown MemOp in MEM stage: " + to_string(state.MEM.mem_op));
-					}
-
-					nextState.WB.Wrt_data = memData;
-				}
-				else if (state.MEM.wrt_mem)
+				case MemLB: // Load Byte
 				{
-					// Store to memory based on MemOp
-					uint32_t address = state.MEM.ALUresult.to_ulong();
-					bitset<32> storeData = state.MEM.Store_data;
-
-					switch (state.MEM.mem_op)
-					{
-					case MemSB: // Store Byte
-					{
-						bitset<8> data = bitset<8>(storeData.to_ulong() & 0xFF);
-						ext_dmem.writeByte(address, data);
-						break;
-					}
-					case MemSH: // Store Half Word
-					{
-						bitset<16> data = bitset<16>(storeData.to_ulong() & 0xFFFF);
-						ext_dmem.writeHalfWord(address, data);
-						break;
-					}
-					case MemSW: // Store Word
-					{
-						ext_dmem.writeDataMem(address, storeData);
-						break;
-					}
-					default:
-						throw runtime_error("Unknown MemOp in MEM stage: " + to_string(state.MEM.mem_op));
-					}
-
-					nextState.WB.Wrt_data = 0; // Not used
+					bitset<8> data = ext_dmem.readByte(address);
+					int8_t signed_data = (int8_t)data.to_ulong();
+					memData = bitset<32>(signed_data);
+					break;
 				}
-				else
+				case MemLH: // Load Half Word
 				{
-					// No memory operation
-					nextState.WB.Wrt_data = state.MEM.ALUresult;
+					bitset<16> data = ext_dmem.readHalfWord(address);
+					int16_t signed_data = (int16_t)data.to_ulong();
+					memData = bitset<32>(signed_data);
+					break;
 				}
+				case MemLW: // Load Word
+				{
+					memData = ext_dmem.readDataMem(address);
+					break;
+				}
+				case MemLBU: // Load Byte Unsigned
+				{
+					bitset<8> data = ext_dmem.readByte(address);
+					memData = bitset<32>(data.to_ulong());
+					break;
+				}
+				case MemLHU: // Load Half Word Unsigned
+				{
+					bitset<16> data = ext_dmem.readHalfWord(address);
+					memData = bitset<32>(data.to_ulong());
+					break;
+				}
+				default:
+					throw runtime_error("Unknown MemOp in MEM stage: " + to_string(state.MEM.mem_op));
+				}
+
+				nextState.WB.Wrt_data = memData;
+			}
+			else if (state.MEM.wrt_mem)
+			{
+				// Store to memory based on MemOp
+				uint32_t address = state.MEM.ALUresult.to_ulong();
+				bitset<32> storeData = state.MEM.Store_data;
+
+				switch (state.MEM.mem_op)
+				{
+				case MemSB: // Store Byte
+				{
+					bitset<8> data = bitset<8>(storeData.to_ulong() & 0xFF);
+					ext_dmem.writeByte(address, data);
+					break;
+				}
+				case MemSH: // Store Half Word
+				{
+					bitset<16> data = bitset<16>(storeData.to_ulong() & 0xFFFF);
+					ext_dmem.writeHalfWord(address, data);
+					break;
+				}
+				case MemSW: // Store Word
+				{
+					ext_dmem.writeDataMem(address, storeData);
+					break;
+				}
+				default:
+					throw runtime_error("Unknown MemOp in MEM stage: " + to_string(state.MEM.mem_op));
+				}
+
+				nextState.WB.Wrt_data = 0; // Not used
+			}
+			else
+			{
+				// No memory operation
+				nextState.WB.Wrt_data = state.MEM.ALUresult;
+			}
 		}
 		else
 			nextState.WB.nop = true; // MEM stage is nop, so WB stage is also nop
@@ -1084,42 +1099,79 @@ public:
 
 			bitset<32> ALUresult;
 
-			// ALU operation based on alu_op
-			switch (state.EX.alu_op)
+			// Handle control flow instructions
+			if (state.EX.is_jal || state.EX.is_jalr)
 			{
-			case ADDU:
-				ALUresult = bitset<32>(operand1.to_ulong() + operand2.to_ulong());
-				break;
-			case SUBU:
-				ALUresult = bitset<32>(operand1.to_ulong() - operand2.to_ulong());
-				break;
-			case AND:
-				ALUresult = bitset<32>(operand1.to_ulong() & operand2.to_ulong());
-				break;
-			case OR:
-				ALUresult = bitset<32>(operand1.to_ulong() | operand2.to_ulong());
-				break;
-			case XOR:
-				ALUresult = bitset<32>(operand1.to_ulong() ^ operand2.to_ulong());
-				break;
-			case SLL:
-				ALUresult = bitset<32>(operand1.to_ulong() << (operand2.to_ulong() & 0x1F));
-				break;
-			case SRL:
-				ALUresult = bitset<32>(operand1.to_ulong() >> (operand2.to_ulong() & 0x1F));
-				break;
-			case SRA:
-				ALUresult = bitset<32>((int32_t)operand1.to_ulong() >> (operand2.to_ulong() & 0x1F));
-				break;
-			case SLT:
-				ALUresult = bitset<32>((int32_t)operand1.to_ulong() < (int32_t)operand2.to_ulong());
-				break;
-			case SLTU:
-				ALUresult = bitset<32>(operand1.to_ulong() < operand2.to_ulong());
-				break;
-			default:
-				throw runtime_error("Unknown ALU operation: " + to_string(state.EX.alu_op));
-				break;
+				// Compute the return address
+				bitset<32> return_address = bitset<32>(state.EX.PC.to_ulong() + 4);
+
+				// Compute the target address
+				bitset<32> target_address;
+				if (state.EX.is_jal)
+				{
+					// JAL: PC + immediate
+					target_address = bitset<32>(state.EX.PC.to_ulong() + state.EX.Imm.to_ulong());
+				}
+				else // JALR
+				{
+					// JALR: (rs1 + immediate) & ~1
+					uint32_t temp_address = operand1.to_ulong() + state.EX.Imm.to_ulong();
+					target_address = bitset<32>(temp_address & ~1); // Clear the least significant bit
+				}
+
+				// Update the PC
+				nextState.IF.PC = target_address;
+
+				// Set ALUresult to return address to write back to rd
+				ALUresult = return_address;
+
+				// Handle control hazards: Flush ID stage
+				nextState.ID.nop = true;
+			}
+			else if (state.EX.is_auipc)
+			{
+				// AUIPC: PC + (immediate << 12)
+				ALUresult = bitset<32>(state.EX.PC.to_ulong() + (state.EX.Imm.to_ulong() << 12));
+			}
+			else
+			{
+				// ALU operation based on alu_op
+				switch (state.EX.alu_op)
+				{
+				case ADDU:
+					ALUresult = bitset<32>(operand1.to_ulong() + operand2.to_ulong());
+					break;
+				case SUBU:
+					ALUresult = bitset<32>(operand1.to_ulong() - operand2.to_ulong());
+					break;
+				case AND:
+					ALUresult = bitset<32>(operand1.to_ulong() & operand2.to_ulong());
+					break;
+				case OR:
+					ALUresult = bitset<32>(operand1.to_ulong() | operand2.to_ulong());
+					break;
+				case XOR:
+					ALUresult = bitset<32>(operand1.to_ulong() ^ operand2.to_ulong());
+					break;
+				case SLL:
+					ALUresult = bitset<32>(operand1.to_ulong() << (operand2.to_ulong() & 0x1F));
+					break;
+				case SRL:
+					ALUresult = bitset<32>(operand1.to_ulong() >> (operand2.to_ulong() & 0x1F));
+					break;
+				case SRA:
+					ALUresult = bitset<32>((int32_t)operand1.to_ulong() >> (operand2.to_ulong() & 0x1F));
+					break;
+				case SLT:
+					ALUresult = bitset<32>((int32_t)operand1.to_ulong() < (int32_t)operand2.to_ulong());
+					break;
+				case SLTU:
+					ALUresult = bitset<32>(operand1.to_ulong() < operand2.to_ulong());
+					break;
+				default:
+					throw runtime_error("Unknown ALU operation: " + to_string(state.EX.alu_op));
+					break;
+				}
 			}
 
 			// Prepare data for MEM stage
@@ -1132,7 +1184,6 @@ public:
 			nextState.MEM.rd_mem = state.EX.rd_mem;
 			nextState.MEM.wrt_mem = state.EX.wrt_mem;
 			nextState.MEM.wrt_enable = state.EX.wrt_enable;
-			nextState.MEM.mem_op = state.EX.mem_op;
 			nextState.MEM.mem_op = state.EX.mem_op; // Pass mem_op to MEM stage
 		}
 		else
@@ -1169,6 +1220,14 @@ public:
 												// then there is a RAW hazard(Read after Write)
 												// The instruction tries to read the value before the value is written back
 			}
+			// Check for RAW hazards with EX stage
+			if (state.EX.wrt_enable && state.EX.Wrt_reg_addr.to_ulong() != 0)
+			{
+				if (state.EX.Wrt_reg_addr == rs1 || (!state.EX.is_I_type && state.EX.Wrt_reg_addr == rs2))
+				{
+					stall = true; // Stall required
+				}
+			}
 
 			if (stall)
 			{
@@ -1189,6 +1248,8 @@ public:
 				nextState.EX.Rt = rs2;
 				nextState.EX.Wrt_reg_addr = rd;
 				nextState.EX.Imm = bitset<32>(signExtendImmediate(instr));
+				nextState.EX.PC = state.ID.PC;
+				nextState.EX.opcode = opcode;
 
 				// Set control signals based on opcode
 				setControlSignals(opcode, funct3, funct7, nextState.EX);
@@ -1301,6 +1362,60 @@ public:
 
 private:
 	string opFilePath;
+	int32_t getJTypeImmediate(uint32_t instr)
+	{
+		int32_t imm = 0;
+		imm |= ((instr >> 31) & 0x1) << 20;	 // imm[20]
+		imm |= ((instr >> 21) & 0x3FF) << 1; // imm[10:1]
+		imm |= ((instr >> 20) & 0x1) << 11;	 // imm[11]
+		imm |= ((instr >> 12) & 0xFF) << 12; // imm[19:12]
+		// Sign-extend to 21 bits
+		if (imm & (1 << 20))
+			imm |= 0xFFE00000;
+		return imm;
+	}
+	int32_t getITypeImmediate(uint32_t instr, bool isShift = false)
+	{
+		if (isShift)
+		{
+			// Extract shamt for shift instructions (bits [24:20])
+			return (instr >> 20) & 0x1F;
+		}
+		else
+		{
+			int32_t imm = instr >> 20;
+			if (imm & 0x800) // Sign-extend
+				imm |= 0xFFFFF000;
+			return imm;
+		}
+	}
+	int32_t getBTypeImmediate(uint32_t instr)
+	{
+		int32_t imm = 0;
+		imm |= ((instr >> 31) & 0x1) << 12; // imm[12]
+		imm |= ((instr >> 25) & 0x3F) << 5; // imm[11:5]
+		imm |= ((instr >> 8) & 0xF) << 1;		// imm[4:1]
+		imm |= ((instr >> 7) & 0x1) << 11;	// imm[10]
+		// Sign-extend to 13 bits
+		if (imm & (1 << 12))
+			imm |= 0xFFFFE000;
+		return imm;
+	}
+	int32_t getSTypeImmediate(uint32_t instr)
+	{
+		int32_t imm = 0;
+		imm |= ((instr >> 25) & 0x7F) << 5; // imm[11:5]
+		imm |= ((instr >> 7) & 0x1F);				// imm[4:0]
+		// Sign-extend to 12 bits
+		if (imm & (1 << 11))
+			imm |= 0xFFFFF000;
+		return imm;
+	}
+	int32_t getUTypeImmediate(uint32_t instr)
+	{
+		int32_t imm = instr & 0xFFFFF000;
+		return imm;
+	}
 
 	int32_t signExtendImmediate(uint32_t instr)
 	{
@@ -1343,6 +1458,9 @@ private:
 		EX.wrt_enable = false;
 		EX.alu_op = NOP;		 // Default ALU operation
 		EX.mem_op = MemNone; // Default memory operation
+		EX.is_jal = false;
+		EX.is_jalr = false;
+		EX.is_auipc = false;
 
 		switch (opcode)
 		{
@@ -1525,6 +1643,7 @@ private:
 
 		case 0x6F: // JAL
 			// JAL instruction
+			EX.is_jal = true;
 			EX.is_I_type = false;
 			EX.wrt_enable = true;
 			EX.rd_mem = false;
@@ -1534,6 +1653,7 @@ private:
 
 		case 0x67: // JALR
 			// JALR instruction
+			EX.is_jalr = true;
 			EX.is_I_type = true;
 			EX.wrt_enable = true;
 			EX.rd_mem = false;
@@ -1542,14 +1662,15 @@ private:
 			break;
 
 		case 0x37: // LUI
-			EX.is_I_type = true;
+			EX.is_I_type = false;
 			EX.wrt_enable = true;
 			EX.rd_mem = false;
 			EX.wrt_mem = false;
-			EX.alu_op = ADDU; // Load upper immediate
+			EX.alu_op = NOP; // No ALU operation needed
 			break;
 
 		case 0x17: // AUIPC
+			EX.is_auipc = true;
 			EX.is_I_type = true;
 			EX.wrt_enable = true;
 			EX.rd_mem = false;
@@ -1597,6 +1718,14 @@ private:
 			// Unknown branch type
 			return false;
 		}
+	}
+
+	void flushPipeline(stateStruct &nextState)
+	{
+		nextState.ID.nop = true;
+		nextState.EX.nop = true;
+		nextState.MEM.nop = true;
+		nextState.WB.nop = true;
 	}
 };
 
