@@ -145,6 +145,7 @@ public:
 class InsMem
 {
 private:
+	int size = 0;
 	vector<bitset<8>> IMem;
 
 public:
@@ -168,6 +169,7 @@ public:
 				// Technically, the IMem should be 32-bit addressable, we keep it as 8-bit addressable here because the imem.txt file is in byte format. Each line is a byte(8 bits)
 				IMem[i] = bitset<8>(line);
 				i++;
+				size++;
 			}
 			imem.close();
 		}
@@ -175,6 +177,10 @@ public:
 		{
 			throw runtime_error("An error occurred: " + string(e.what()));
 		}
+	}
+	int totalInstructions()
+	{
+		return size / 4;
 	}
 
 	bitset<32> readInstr(bitset<32> ReadAddress)
@@ -879,6 +885,32 @@ public:
 		catch (const exception &e)
 		{
 			throw runtime_error("An error occurred in SingleStageCore::printState: " + string(e.what()));
+		}
+	}
+
+	void printEvaluation(string ioDir) // A function to print the performance metrics of the core
+	{
+		try
+		{
+			ofstream eval;
+			string filePath = ioDir + "/SS_PerformanceMetrics.txt";
+			eval.open(filePath, std::ios_base::trunc);
+			if (eval.is_open())
+			{
+				eval << "-----------------------------Single Stage Core Performance Metrics-----------------------------" << endl;
+				eval << "Number of cycles taken: " << cycle + 2 << endl;
+				eval << "Total Number of Instructions: " << ext_imem.totalInstructions() << endl;
+				eval << "Cycles per instruction: " << ((double)cycle + 2) / ext_imem.totalInstructions() << endl;
+				eval << "Instructions per cycle: " << ext_imem.totalInstructions() / ((double)cycle + 2) << endl;
+			}
+			else
+			{
+				throw runtime_error("Unable to open SS StateResult output file.");
+			}
+		}
+		catch (const exception &e)
+		{
+			throw runtime_error("An error occurred in SingleStageCore::printEvaluation: " + string(e.what()));
 		}
 	}
 
@@ -1773,6 +1805,7 @@ int main(int argc, char *argv[])
 				// Ensure the nop flag is set correctly after halting
 				SSCore.state.SS.nop = true;
 				SSCore.printState(SSCore.state, SSCore.cycle); // The final state after halting
+				SSCore.printEvaluation(ioDir);
 				break;
 			}
 
