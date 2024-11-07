@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 
 		InsMem imem = InsMem(MemType::Imem, ioDir);
 		DataMem dmem_ss = DataMem(MemType::DmemSS, ioDir);
-		DataMem dmem_fs = DataMem(MemType::DmemFS, ioDir);
+		// DataMem dmem_fs = DataMem(MemType::DmemFS, ioDir);
 
 		SingleStageCore SSCore(ioDir, imem, dmem_ss);
 		// FiveStageCore FSCore(ioDir, imem, dmem_fs);

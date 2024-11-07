@@ -426,7 +426,7 @@ void SingleStageCore::printState(stateStruct state, int cycle) // A Debug functi
 	}
 }
 
-void SingleStageCore::printEvaluation(string ioDir) // A function to print the performance metrics of the core
+void SingleStageCore::printEvaluation(string ioDir) // A function to print the performance of the single-stage pipeline
 {
 	try
 	{
