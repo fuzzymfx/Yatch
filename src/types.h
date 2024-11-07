@@ -183,7 +183,11 @@ public:
 	string ioDir;
 	struct stateStruct state, nextState;
 	InsMem ext_imem;
-	DataMem ext_dmem;
+
+protected:
+	DataMem &ext_dmem;
+
+public:
 	Core(string ioDir, InsMem &imem, DataMem &dmem);
 	virtual void step() {}
 	virtual void printState() {}
