@@ -1,6 +1,6 @@
 #include "single_stage.h"
 
-SingleStageCore::SingleStageCore(string ioDir, InsMem &imem, DataMem &dmem) : Core(ioDir + "/SS_", imem, dmem), opFilePath(ioDir + "/StateResult_SS.txt")
+SingleStageCore::SingleStageCore(path ioDir, InsMem &imem, DataMem &dmem) : Core(ioDir, imem, dmem, "SS"), opFilePath(ioDir / "SS_StateResult.txt")
 {
 	// Initialize PC to 0
 	state.SS.PC = bitset<32>(0);

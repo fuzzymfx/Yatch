@@ -1,5 +1,9 @@
 #include "types.h"
 #include <string>
+#include <filesystem>
+
+using namespace std;
+using namespace std::filesystem;
 
 // Implementation of MemType::toString
 string MemType::toString(Type type)
@@ -9,16 +13,22 @@ string MemType::toString(Type type)
 	case Imem:
 		return "Imem";
 	case DmemSS:
-		return "DmemSS";
+		return "SS";
 	case DmemFS:
-		return "DmemFS";
+		return "FS";
 	default:
 		return "Unknown";
 	}
 }
 
+string trim(const string &str)
+{
+	size_t end = str.find_last_not_of(" \r\n\t");
+	return (end == string::npos) ? "" : str.substr(0, end + 1);
+}
+
 // Implementation of InsMem methods
-InsMem::InsMem(MemType::Type type, string ioDir) : id(type), ioDir(ioDir)
+InsMem::InsMem(MemType::Type type, path ioDir) : id(type), ioDir(ioDir)
 {
 	IMem.resize(MemSize);
 	ifstream imem;
@@ -26,13 +36,14 @@ InsMem::InsMem(MemType::Type type, string ioDir) : id(type), ioDir(ioDir)
 	int i = 0;
 	try
 	{
-		imem.open(ioDir + "/imem.txt");
+		imem.open(ioDir / "imem.txt");
 		if (!imem.is_open())
 		{
 			throw runtime_error("Unable to open IMEM input file.");
 		}
 		while (getline(imem, line))
 		{
+			line = trim(line);
 			// Technically, the IMem should be 32-bit addressable, we keep it as 8-bit addressable here because the imem.txt file is in byte format. Each line is a byte(8 bits)
 			IMem[i] = bitset<8>(line);
 			i++;
@@ -42,7 +53,7 @@ InsMem::InsMem(MemType::Type type, string ioDir) : id(type), ioDir(ioDir)
 	}
 	catch (const exception &e)
 	{
-		throw runtime_error("An error occurred: " + string(e.what()));
+		throw runtime_error("An error occurred in InsMem constructor: " + string(e.what()));
 	}
 }
 
@@ -71,24 +82,25 @@ bitset<32> InsMem::readInstr(bitset<32> ReadAddress)
 }
 
 // Implementation of DataMem methods
-DataMem::DataMem(MemType::Type type, string ioDir) : id{type}, ioDir{ioDir}
+DataMem::DataMem(MemType::Type type, path ioDir) : id{type}, ioDir{ioDir}
 {
 	DMem.resize(MemSize);
 	string name = MemType::toString(id);
 
-	opFilePath = ioDir + "/" + name + "_DMEMResult.txt";
+	opFilePath = ioDir / (name + "_DMEMResult.txt");
 	ifstream dmem;
 	string line;
 	int i = 0;
 	try
 	{
-		dmem.open(ioDir + "/dmem.txt");
+		dmem.open(ioDir / "dmem.txt");
 		if (!dmem.is_open())
 		{
 			throw runtime_error("Unable to open DMEM input file.");
 		}
 		while (getline(dmem, line))
 		{
+			line = trim(line);
 			DMem[i] = bitset<8>(line);
 			i++;
 		}
@@ -96,7 +108,7 @@ DataMem::DataMem(MemType::Type type, string ioDir) : id{type}, ioDir{ioDir}
 	}
 	catch (const exception &e)
 	{
-		throw runtime_error("An error occurred: " + string(e.what()));
+		throw runtime_error("An error occurred in DataMem constructor: " + string(e.what()));
 	}
 }
 
@@ -223,7 +235,7 @@ void DataMem::outputDataMem()
 }
 
 // Implementation of RegisterFile methods
-RegisterFile::RegisterFile(string ioDir) : outputFile{ioDir + "RFResult.txt"}
+RegisterFile::RegisterFile(path ioDir, string prefix) : outputFile{ioDir / (prefix + "_RFResult.txt")}
 {
 	Registers.resize(32);					// 32 registers in total, each 32 bits wide
 	Registers[0] = bitset<32>(0); // Register x0 is always 0 in RISC-V
@@ -287,4 +299,4 @@ void RegisterFile::outputRF(int cycle)
 }
 
 // Implementation of Core constructor
-Core::Core(string ioDir, InsMem &imem, DataMem &dmem) : myRF(ioDir), ioDir{ioDir}, ext_imem{imem}, ext_dmem{dmem} {}
+Core::Core(path ioDir, InsMem &imem, DataMem &dmem, string prefix) : myRF(ioDir, prefix), ioDir{ioDir}, ext_imem{imem}, ext_dmem{dmem} {}

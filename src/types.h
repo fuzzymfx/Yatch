@@ -7,8 +7,10 @@
 #include <bitset>
 #include <fstream>
 #include <stdexcept>
+#include <filesystem>
 
 using namespace std;
+using namespace std::filesystem;
 
 #define MemSize 1000 // memory size, in reality, the memory size should be 2^32, but for this lab, for the space resaon, we keep it as this large number, but the memory is still 32-bit addressable.
 
@@ -133,8 +135,8 @@ class InsMem
 {
 public:
 	MemType::Type id;
-	string ioDir;
-	InsMem(MemType::Type type, string ioDir);
+	path ioDir;
+	InsMem(MemType::Type type, path ioDir);
 	bitset<32> readInstr(bitset<32> ReadAddress);
 	int totalInstructions();
 
@@ -146,8 +148,8 @@ private:
 class DataMem
 {
 public:
-	string opFilePath, ioDir;
-	DataMem(MemType::Type type, string ioDir);
+	path opFilePath, ioDir;
+	DataMem(MemType::Type type, path ioDir);
 	bitset<8> readByte(uint32_t address);
 	bitset<16> readHalfWord(uint32_t address);
 	void writeByte(uint32_t address, bitset<8> data);
@@ -164,8 +166,8 @@ private:
 class RegisterFile
 {
 public:
-	string outputFile;
-	RegisterFile(string ioDir);
+	path outputFile;
+	RegisterFile(path ioDir, string prefix);
 	bitset<32> readRF(bitset<5> Reg_addr);
 	void writeRF(bitset<5> Reg_addr, bitset<32> Wrt_reg_data);
 	void outputRF(int cycle);
@@ -180,7 +182,7 @@ public:
 	RegisterFile myRF;
 	uint32_t cycle = 0;
 	bool halted = false;
-	string ioDir;
+	path ioDir;
 	struct stateStruct state, nextState;
 	InsMem ext_imem;
 
@@ -188,7 +190,7 @@ protected:
 	DataMem &ext_dmem;
 
 public:
-	Core(string ioDir, InsMem &imem, DataMem &dmem);
+	Core(path ioDir, InsMem &imem, DataMem &dmem, string prefix);
 	virtual void step() {}
 	virtual void printState() {}
 };
