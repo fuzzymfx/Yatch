@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string>
-#include "types.cpp"
+#include "memory.cpp"
 #include "single_stage.cpp"
 
 using namespace std;
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 			{
 				// Ensure the nop flag is set correctly after halting
 				SSCore.state.SS.nop = true;
-				SSCore.printState(SSCore.state, SSCore.cycle); // The final state after halting
+				SSCore.printState(SSCore.state, SSCore.cycle + 1); // The final state after halting
 				SSCore.printEvaluation(ioDir);
 				break;
 			}
