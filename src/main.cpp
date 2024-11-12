@@ -2,6 +2,7 @@
 #include <string>
 #include "memory.cpp"
 #include "single_stage.cpp"
+#include "five_stage.cpp"
 
 using namespace std;
 
@@ -35,10 +36,10 @@ int main(int argc, char *argv[])
 
 		InsMem imem = InsMem(MemType::Imem, ioDir);
 		DataMem dmem_ss = DataMem(MemType::DmemSS, ioDir);
-		// DataMem dmem_fs = DataMem(MemType::DmemFS, ioDir);
+		DataMem dmem_fs = DataMem(MemType::DmemFS, ioDir);
 
 		SingleStageCore SSCore(ioDir, imem, dmem_ss);
-		// FiveStageCore FSCore(ioDir, imem, dmem_fs);
+		FiveStageCore FSCore(ioDir, imem, dmem_fs);
 
 		while (1)
 		{
@@ -53,16 +54,16 @@ int main(int argc, char *argv[])
 				break;
 			}
 
-			// if (!FSCore.halted)
-			// 	FSCore.step();
+			if (!FSCore.halted)
+				FSCore.step();
 
-			// if (SSCore.halted && FSCore.halted)
-			// 	break;
+			if (SSCore.halted && FSCore.halted)
+				break;
 		}
 
 		// dump SS and FS data mem.
 		dmem_ss.outputDataMem();
-		// dmem_fs.outputDataMem();
+		dmem_fs.outputDataMem();
 	}
 	catch (const exception &e)
 	{

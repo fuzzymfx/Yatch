@@ -1,5 +1,4 @@
-#include "types.h"
-#include <five_stage.h>
+#include "five_stage.h"
 
 using namespace std;
 using namespace std::filesystem;
@@ -465,7 +464,7 @@ int32_t FiveStageCore::getJTypeImmediate(uint32_t instr)
 		imm |= 0xFFE00000;
 	return imm;
 }
-int32_t FiveStageCore::getITypeImmediate(uint32_t instr, bool isShift = false)
+int32_t FiveStageCore::getITypeImmediate(uint32_t instr, bool isShift)
 {
 	if (isShift)
 	{
